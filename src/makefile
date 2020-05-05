@@ -1,20 +1,22 @@
-CXX = clang++
-CC = clang
+CXX = g++
+CC = gcc
 HOMEDIR = ..
-CPPFLAGS = -Wall -Wextra -std=c++17 -O2
-CFLAGS = -Wall -Wextra -std=c11 -O2
+CPPFLAGS = -Wall -Wextra -std=c++17 -O0 -g
+CFLAGS = -Wall -Wextra -std=c11 -O0 -g
+INCFLAGS = -I/opt/cuda/targets/x86_64-linux/include/
+LINKFLAGS = -L/opt/cuda/targets/x86_64-linux/lib/
 -include $(OBJS:.o=.d)
 
-SRCS = main.cc mmio.c
-OBJS = main.o mmio.o
+SRCS = main.cc mmio.c utils.cc cpu_louvain.cc
+OBJS = main.o mmio.o utils.o cpu_louvain.o
 
 main: $(OBJS)
-	$(CXX) $(CPPFLAGS) $(OBJS) -o gpulouvain
+	$(CXX) $(CPPFLAGS) $(OBJS) $(LINKFLAGS) -o gpulouvain
 
 # This is some dark magic and I don't want to understand
 # http://www.scottmcpeak.com/autodepend/autodepend.html
 %.o: %.cc
-	$(CXX) -c $(CPPFLAGS) $(DEPFLAGS) $< -o $@
+	$(CXX) -c $(CPPFLAGS) $(DEPFLAGS) $(INCFLAGS) $< -o $@
 	$(CXX) -MM $(CPPFLAGS) $(DEPFLAGS) $< -o $*.d
 	@mv -f $*.d $*.d.tmp
 	@sed -e 's|.*:|$*.o:|' < $*.d.tmp > $*.d
@@ -23,7 +25,7 @@ main: $(OBJS)
 	@rm -f $*.d.tmp
 
 %.o: %.c
-	$(CC) -c $(CFLAGS) $(DEPFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $(DEPFLAGS) $(INCFLAGS) $< -o $@
 	$(CC) -MM $(CFLAGS) $(DEPFLAGS) $< -o $*.d
 	@mv -f $*.d $*.d.tmp
 	@sed -e 's|.*:|$*.o:|' < $*.d.tmp > $*.d
