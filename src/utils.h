@@ -6,7 +6,6 @@
 
 #include <iostream>
 
-/*
 void detect_cuda_init();
 
 #define CUDA_CHECK(error)                                                    \
@@ -32,7 +31,6 @@ C device_fetch_var(const C* var)
     CUDA_CHECK(cudaMemcpy(&res, var, sizeof(C), cudaMemcpyDeviceToHost));
     return res;
 }
-*/
 
 struct Edge
 {
