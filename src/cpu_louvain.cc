@@ -105,7 +105,7 @@ float modularity_optimisation()
     float gain = 0;
     for (int v = 0; v < N; ++v) // parallel
     {
-        gain += compute_move(v);
+        gain += compute_move(order[v]);
     }
     std::swap(c, new_c);
     memcpy(nodes_comm, new_nodes_comm, N * sizeof(int));
@@ -169,10 +169,7 @@ void cpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     m = 0;
     for (int i = 0; i < E; ++i)
     {
-//        if (edges[i].src <= edges[i].dst)
-        {
-            m += edges[i].weight;
-        }
+        m += edges[i].weight;
     }
     m /= 2;
     memcpy(orig_edges, edges, E * sizeof(Edge));
