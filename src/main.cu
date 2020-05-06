@@ -9,6 +9,7 @@
 
 #include "mmio.h"
 #include "cpu_louvain.h"
+#include "gpu_louvain.h"
 
 bool verbose = false;
 float min_gain = -1;
@@ -138,6 +139,7 @@ int main(int argc, char* argv[])
 
 //    detect_cuda_init();
 
+    gpu_louvain(N, edges, E, min_gain, verbose);
     cpu_louvain(N, edges, E, min_gain, verbose);
     free(edges);
 }

@@ -1,9 +1,6 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-
 #include <iostream>
 
 void detect_cuda_init();
@@ -31,13 +28,6 @@ C device_fetch_var(const C* var)
     CUDA_CHECK(cudaMemcpy(&res, var, sizeof(C), cudaMemcpyDeviceToHost));
     return res;
 }
-
-struct Edge
-{
-    int src;
-    int dst;
-    float weight;
-};
 
 #endif  // __UTILS_H__
 

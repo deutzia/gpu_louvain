@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <string.h>
+#include <stdio.h>
 
 // number of vertices and communities
 int N;
@@ -22,6 +23,18 @@ float* changes; // TODO separate for each vertex
 int* order;
 int* nodes_comm;
 int* new_nodes_comm;
+
+struct vertex_cmp
+{
+    int* deg;
+    vertex_cmp(int* d)
+    : deg(d)
+    {}
+    bool operator()(int a, int b)
+    {
+        return deg[a] < deg[b];
+    }
+};
 
 void prepare_data_structures()
 {
@@ -60,7 +73,7 @@ void prepare_data_structures()
         order[i] = i;
     }
 
-    std::sort(order, order + N, [](int a, int b){return degrees[a] < degrees[b];});
+    std::sort(order, order + N, vertex_cmp(degrees));
 
     for (int i = 0; i < N; ++i)
     {
