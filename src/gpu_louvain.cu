@@ -87,7 +87,6 @@ __host__ void prepare_data_structures(int N, int E, Edge* edges, int* degrees, i
 
 __device__ float compute_move(int vertex, int N, float* changes, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, int m)
 {
-    memset(changes, '\0', N * sizeof(int));
     for (int j = e_start[vertex]; j < e_end[vertex]; ++j)
     {
         if (edges[j].dst != vertex)
@@ -145,6 +144,7 @@ __host__ float modularity_optimisation(int N, int* e_start, int* e_end, Edge* ed
     float* gain;
     CUDA_CHECK(cudaMalloc((void**)&gain, sizeof(float)));
     CUDA_CHECK(cudaMemset(gain, '\0', sizeof(float)));
+    CUDA_CHECK(cudaMemset(changes, '\0', N * sizeof(float) * BLOCKS * THREADS_PER_BLOCK));
     modularity_optimisation_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, gain, changes, order);
     std::swap(c, new_c);
     CUDA_CHECK(cudaMemcpy(nodes_comm, new_nodes_comm, N * sizeof(int), cudaMemcpyDeviceToDevice));
@@ -177,6 +177,7 @@ __global__ void prepare_reorder_kernel2(int N, int* reorder, int* c, int* counte
         if (reorder[c[i]] == -1)
             reorder[c[i]] = (*counter)++;
     }
+//    printf("counter at the end: %d\n", *counter);
 }
 
 __global__ void aggregate_kernel(int E, int orig_N, Edge* edges, int* reorder, int* c, int* final_communities)
@@ -194,7 +195,7 @@ __global__ void aggregate_kernel(int E, int orig_N, Edge* edges, int* reorder, i
     }
 }
 
-__host__ void aggregate(int N, int E, int orig_N, Edge* edges, int* c, int* final_communities, int* degrees, int* e_start, int* e_end, float* k, int* order, int* nodes_comm, float* ac)
+__host__ void aggregate(int& N, int E, int orig_N, Edge* edges, int* c, int* final_communities, int* degrees, int* e_start, int* e_end, float* k, int* order, int* nodes_comm, float* ac)
 {
     int* reorder;
     CUDA_CHECK(cudaMalloc((void**)&reorder, N * sizeof(int)));
@@ -204,6 +205,7 @@ __host__ void aggregate(int N, int E, int orig_N, Edge* edges, int* c, int* fina
     prepare_reorder_kernel2<<<1, 1>>>(N, reorder, c, counter);
     aggregate_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(E, orig_N, edges, reorder, c, final_communities);
     N = device_fetch_var(counter);
+//    printf("changed value of N to %d\n", N);
     CUDA_CHECK(cudaFree(reorder));
     CUDA_CHECK(cudaFree(counter));
     prepare_data_structures(N, E, edges, degrees, e_start, e_end, k, order, nodes_comm, c, ac);
@@ -288,6 +290,7 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     }
     float* ac_host = (float*)malloc(orig_N * sizeof(float));
     memset(ac_host, '\0', orig_N * sizeof(float));
+    cudaDeviceSynchronize();
     for (int i = 0; i < orig_N; ++i)
     {
         ac_host[final_communities_host[i]] += k_host[i];
