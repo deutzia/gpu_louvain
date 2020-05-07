@@ -85,7 +85,7 @@ __host__ void prepare_data_structures(int N, int E, Edge* edges, int* degrees, i
     thrust::sort(thrust::device, order, order + N, vertex_cmp(degrees));
 }
 
-__device__ float compute_move(int vertex, int N, float* changes, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, int m)
+__device__ float compute_move(int vertex, int N, float* changes, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m)
 {
     for (int j = e_start[vertex]; j < e_end[vertex]; ++j)
     {
@@ -112,7 +112,6 @@ __device__ float compute_move(int vertex, int N, float* changes, int* e_start, i
         new_c[vertex] = resultComm;
     else
         new_c[vertex] = c[vertex];
-    printf("vertex = %d, change = %f new_c[vertex] = %d\n", vertex, resultChange, new_c[vertex]);
     return resultChange;
 }
 
@@ -139,7 +138,7 @@ __global__ void update_ac_kernel(int N, float* ac, int* c, float* k)
 //__global__ void debug_kernel(int N, in
 
 // return modularity gain
-__host__ float modularity_optimisation(int N, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, int m, float* changes, int* order)
+__host__ float modularity_optimisation(int N, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m, float* changes, int* order)
 {
     float* gain;
     CUDA_CHECK(cudaMalloc((void**)&gain, sizeof(float)));
