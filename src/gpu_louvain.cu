@@ -3,11 +3,12 @@
 #include <algorithm>
 #include <string.h>
 #include <thrust/sort.h>
+#include <thrust/scan.h>
 
 #include "utils.h"
 
 #define BLOCKS 80
-#define THREADS_PER_BLOCK 128
+#define THREADS_PER_BLOCK 1024
 
 struct edge_cmp
 {
@@ -45,18 +46,20 @@ prepare_data_structures_kernel1(int N, int E, int* degrees, Edge* edges, int* c,
     }
 }
 
-// TODO run on more than one thread
 __global__ void prepare_data_structures_kernel2(int N, int E, Edge* edges, int* e_start, int* e_end)
 {
-    int e_count = 0;
-    for (int v = 0; v < N; ++v)
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int num_threads = blockDim.x * gridDim.x;
+    for (int i = tid; i < E; i += num_threads)
     {
-        e_start[v] = e_count;
-        while (e_count < E && edges[e_count].src == v)
+        if (i == 0 || edges[i].src != edges[i-1].src)
         {
-            e_count++;
+            e_start[edges[i].src] = i;
         }
-        e_end[v] = e_count;
+        if (i == E - 1 || edges[i].src != edges[i+1].src)
+        {
+            e_end[edges[i].src] = i + 1;
+        }
     }
 }
 
@@ -80,7 +83,7 @@ __host__ void prepare_data_structures(int N, int E, Edge* edges, int* degrees, i
     CUDA_CHECK(cudaMemset(e_end, '\0', N * sizeof(int)));
     CUDA_CHECK(cudaMemset(k, '\0', N * sizeof(float)));
     prepare_data_structures_kernel1<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, degrees, edges, c, k, order, nodes_comm);
-    prepare_data_structures_kernel2<<<1, 1>>>(N, E, edges, e_start, e_end);
+    prepare_data_structures_kernel2<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, edges, e_start, e_end);
     CUDA_CHECK(cudaMemcpy(ac, k, N * sizeof(float), cudaMemcpyDeviceToDevice));
     thrust::sort(thrust::device, order, order + N, vertex_cmp(degrees));
 }
@@ -152,23 +155,12 @@ __host__ float modularity_optimisation(int N, int* e_start, int* e_end, Edge* ed
     return result;
 }
 
-__global__ void prepare_reorder_kernel(int N, int* reorder)
+__global__ void prepare_reorder_kernel(int N, int* reorder, int* c)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int num_threads = blockDim.x * gridDim.x;
     for (int i = tid; i < N; i += num_threads)
-        reorder[i] = -1;
-}
-
-// TODO do it in more than one thread...
-__global__ void prepare_reorder_kernel2(int N, int* reorder, int* c, int* counter)
-{
-    *counter = 0;
-    for (int i = 0; i < N; ++i)
-    {
-        if (reorder[c[i]] == -1)
-            reorder[c[i]] = (*counter)++;
-    }
+        reorder[c[i]] = 1;
 }
 
 __global__ void aggregate_kernel(int E, int orig_N, Edge* edges, int* reorder, int* c, int* final_communities)
@@ -189,15 +181,13 @@ __global__ void aggregate_kernel(int E, int orig_N, Edge* edges, int* reorder, i
 __host__ void aggregate(int& N, int E, int orig_N, Edge* edges, int* c, int* final_communities, int* degrees, int* e_start, int* e_end, float* k, int* order, int* nodes_comm, float* ac)
 {
     int* reorder;
-    CUDA_CHECK(cudaMalloc((void**)&reorder, N * sizeof(int)));
-    prepare_reorder_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, reorder);
-    int* counter;
-    CUDA_CHECK(cudaMalloc((void**)&counter, sizeof(int)));
-    prepare_reorder_kernel2<<<1, 1>>>(N, reorder, c, counter);
+    CUDA_CHECK(cudaMalloc((void**)&reorder, (N + 1) * sizeof(int)));
+    CUDA_CHECK(cudaMemset(reorder, 0, (N + 1) * sizeof(int)));
+    prepare_reorder_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, reorder, c);
+    thrust::exclusive_scan(thrust::device, reorder, reorder + N + 1, reorder);
     aggregate_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(E, orig_N, edges, reorder, c, final_communities);
-    N = device_fetch_var(counter);
+    N = device_fetch_var(reorder + N);
     CUDA_CHECK(cudaFree(reorder));
-    CUDA_CHECK(cudaFree(counter));
     prepare_data_structures(N, E, edges, degrees, e_start, e_end, k, order, nodes_comm, c, ac);
 }
 
