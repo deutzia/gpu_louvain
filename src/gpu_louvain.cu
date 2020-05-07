@@ -135,8 +135,6 @@ __global__ void update_ac_kernel(int N, float* ac, int* c, float* k)
     }
 }
 
-//__global__ void debug_kernel(int N, in
-
 // return modularity gain
 __host__ float modularity_optimisation(int N, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m, float* changes, int* order)
 {
@@ -150,7 +148,6 @@ __host__ float modularity_optimisation(int N, int* e_start, int* e_end, Edge* ed
     CUDA_CHECK(cudaMemset(ac, '\0', N * sizeof(float)));
     update_ac_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, ac, c, k);
     float result = device_fetch_var(gain);
-//    fprintf(stderr, "modularity gain = %f\n", result);
     CUDA_CHECK(cudaFree(gain));
     return result;
 }
@@ -166,17 +163,12 @@ __global__ void prepare_reorder_kernel(int N, int* reorder)
 // TODO do it in more than one thread...
 __global__ void prepare_reorder_kernel2(int N, int* reorder, int* c, int* counter)
 {
-//    printf("preparing reorder, communities are:\n");
-//    for (int i = 0; i < N; ++i)
-//        printf("%d ", c[i]);
-//    printf("\n");
     *counter = 0;
     for (int i = 0; i < N; ++i)
     {
         if (reorder[c[i]] == -1)
             reorder[c[i]] = (*counter)++;
     }
-//    printf("counter at the end: %d\n", *counter);
 }
 
 __global__ void aggregate_kernel(int E, int orig_N, Edge* edges, int* reorder, int* c, int* final_communities)
@@ -204,7 +196,6 @@ __host__ void aggregate(int& N, int E, int orig_N, Edge* edges, int* c, int* fin
     prepare_reorder_kernel2<<<1, 1>>>(N, reorder, c, counter);
     aggregate_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(E, orig_N, edges, reorder, c, final_communities);
     N = device_fetch_var(counter);
-//    printf("changed value of N to %d\n", N);
     CUDA_CHECK(cudaFree(reorder));
     CUDA_CHECK(cudaFree(counter));
     prepare_data_structures(N, E, edges, degrees, e_start, e_end, k, order, nodes_comm, c, ac);
@@ -222,7 +213,6 @@ __global__ void prepare_final_communities(int* fc, int N)
 
 void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
 {
-    // number of vertices and communities
     int N;
     int orig_N;
     int E;

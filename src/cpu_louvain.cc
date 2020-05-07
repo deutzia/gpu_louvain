@@ -197,7 +197,7 @@ void cpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     memset(k, '\0', orig_N * sizeof(float));
     for (int i = 0; i < E; ++i)
     {
-        k[orig_edges[i].dst] += edges[i].weight;
+        k[orig_edges[i].dst] += orig_edges[i].weight;
     }
     memset(ac, '\0', orig_N * sizeof(float));
     for (int i = 0; i < orig_N; ++i)
