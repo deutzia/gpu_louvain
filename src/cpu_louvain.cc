@@ -1,8 +1,11 @@
 #include "cpu_louvain.h"
 
 #include <algorithm>
+#include <math.h>
 #include <string.h>
 #include <stdio.h>
+
+#define EPS (1e-12)
 
 // number of vertices and communities
 int N;
@@ -96,7 +99,7 @@ float compute_move(int vertex)
         int i = c[edges[e].dst];
         float change = 1 / m * (changes[i] - changes[c[vertex]]) + k[vertex] * ((ac[c[vertex]] - k[vertex]) - ac[i]) / (2 * m * m);
         //printf("vertex = %d new_comm = %d result_change = %f\n", vertex, i, change);
-        if ((change > resultChange || (change == resultChange && i < resultComm)) &&
+        if ((change > resultChange || (fabs(change - resultChange) < EPS && i < resultComm)) &&
                 (nodes_comm[c[vertex]] > 1 ||
                  nodes_comm[i] > 1 ||
                  i < c[vertex]))
