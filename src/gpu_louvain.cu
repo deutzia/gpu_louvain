@@ -129,28 +129,26 @@ __device__ float compute_move(int vertex, int N, float* changes, uint64_t* owner
             atomicAdd(&changes[pos], edges[j].weight);
         }
     }
-    int resultComm = -1;
+    int resultComm = c[vertex];
     float resultChange = 0;
-    for (int i = 0; i < N; ++i) // TODO nie iteorwać po wszystkich, tylko po sąsiednich
+    for (int e = e_start[vertex]; e < e_end[vertex]; ++e)
     {
+        int i = c[edges[e].dst];
         uint32_t pos1 = getpos(owner, (uint64_t)N * vertex + i + 1, N);
         uint32_t pos2 = getpos(owner, (uint32_t)N * vertex + c[vertex] + 1, N);
         float change = 1 / m * (changes[pos1] - changes[pos2]) + k[vertex] * ((ac[c[vertex]] - k[vertex]) - ac[i]) / (2 * m * m);
-        if (change > resultChange &&
+        if ((change > resultChange || (change == resultChange && i < resultComm)) &&
                 (nodes_comm[c[vertex]] > 1 ||
                  nodes_comm[i] > 1 ||
                  i < c[vertex]))
         {
+            new_nodes_comm[i]++;
+            new_nodes_comm[resultComm]--;
             resultChange = change;
             resultComm = i;
-            new_nodes_comm[i]++;
-            new_nodes_comm[c[vertex]]--;
         }
     }
-    if (resultChange > 0)
-        new_c[vertex] = resultComm;
-    else
-        new_c[vertex] = c[vertex];
+    new_c[vertex] = resultComm;
     return resultChange;
 }
 
@@ -265,8 +263,6 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     orig_N = N_;
     orig_edges = edges_;
 
-    printf("N = %d, E = %d\n", N, E);
-
     CUDA_CHECK(cudaMalloc((void**)&final_communities, N * sizeof(int)));
     prepare_final_communities<<<BLOCKS, THREADS_PER_BLOCK>>>(final_communities, N);
     CUDA_CHECK(cudaMalloc((void**)&degrees, N * sizeof(int)));
@@ -291,12 +287,10 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
         m += orig_edges[i].weight;
     }
     m /= 2;
-    fprintf(stderr, "starting algorithm\n");
     float modularity_change = 0;
     do
     {
         modularity_change = modularity_optimisation(N, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, changes, owner, order);
-        fprintf(stderr, "modularity gain: %f\n", modularity_change);
         std::swap(c, new_c);
         aggregate(N, E, orig_N, edges, c, final_communities, degrees, e_start, e_end, k, order, nodes_comm, ac);
     } while (modularity_change > min_gain);

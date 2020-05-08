@@ -89,23 +89,24 @@ float compute_move(int vertex)
         if (edges[j].dst != vertex)
             changes[c[edges[j].dst]] += edges[j].weight;
     }
-    int resultComm = -1;
+    int resultComm = c[vertex];
     float resultChange = 0;
-    for (int i = 0; i < N; ++i) // todo nie iteorwać po wszystkich, tylko po sąsiednich
+    for (int e = e_start[vertex]; e < e_end[vertex]; ++e)
     {
+        int i = c[edges[e].dst];
         float change = 1 / m * (changes[i] - changes[c[vertex]]) + k[vertex] * ((ac[c[vertex]] - k[vertex]) - ac[i]) / (2 * m * m);
-        if (change > resultChange &&
+        if ((change > resultChange || (change == resultChange && i < resultComm)) &&
                 (nodes_comm[c[vertex]] > 1 ||
                  nodes_comm[i] > 1 ||
                  i < c[vertex]))
         {
+            new_nodes_comm[i]++;
+            new_nodes_comm[resultComm]--;
             resultChange = change;
             resultComm = i;
-            new_nodes_comm[i]++;
-            new_nodes_comm[c[vertex]]--;
         }
     }
-    if (resultChange > 0) // todo czy mozna zmieniac w `c` czy trzeba w innej?
+    if (resultChange > 0)
         new_c[vertex] = resultComm;
     else
         new_c[vertex] = c[vertex];
