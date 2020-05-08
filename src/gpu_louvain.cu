@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdint.h>
 #include <string.h>
+#include <thrust/reduce.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 
@@ -27,7 +28,7 @@ prepare_data_structures_kernel1(int N, int E, int* degrees, Edge* edges, int* c,
     int num_threads = blockDim.x * gridDim.x;
     for (int i = tid; i < E; i += num_threads)
     {
-        atomicAdd(&degrees[edges[i].src], 1);
+//        atomicAdd(&degrees[edges[i].src], 1);
     }
     for (int i = tid; i < N; i += num_threads)
     {
@@ -39,7 +40,7 @@ prepare_data_structures_kernel1(int N, int E, int* degrees, Edge* edges, int* c,
     }
     for (int i = tid; i < N; i += num_threads)
     {
-        order[i] = i;
+//        order[i] = i;
     }
 
     for (int i = tid; i < N; i += num_threads)
@@ -56,25 +57,12 @@ __global__ void prepare_data_structures_kernel2(int N, int E, Edge* edges, int* 
     {
         if (i == 0 || edges[i].src != edges[i-1].src)
         {
-            e_start[edges[i].src] = i;
+//            e_start[edges[i].src] = i;
         }
         if (i == E - 1 || edges[i].src != edges[i+1].src)
         {
-            e_end[edges[i].src] = i + 1;
+//            e_end[edges[i].src] = i + 1;
         }
-    }
-}
-
-__global__ void debug_kernel(int N, int* degrees)
-{
-    int min = N, max = 0, sum = 0;
-    for (int i = 0; i < N; ++i)
-    {
-        sum += degrees[i];
-        if (min > degrees[i])
-            min = degrees[i];
-        if (max < degrees[i])
-            max = degrees[i];
     }
 }
 
@@ -92,16 +80,16 @@ struct vertex_cmp
 
 __host__ void prepare_data_structures(int N, int E, Edge* edges, int* degrees, int* e_start, int* e_end, float* k, int* order, int* nodes_comm, int* c, float* ac)
 {
-    thrust::sort(thrust::device, edges, edges + E, edge_cmp());
-    CUDA_CHECK(cudaMemset(degrees, 0, N * sizeof(int)));
-    CUDA_CHECK(cudaMemset(e_start, '\0', N * sizeof(int)));
-    CUDA_CHECK(cudaMemset(e_end, '\0', N * sizeof(int)));
+//    thrust::sort(thrust::device, edges, edges + E, edge_cmp());
+//    CUDA_CHECK(cudaMemset(degrees, 0, N * sizeof(int)));
+//    CUDA_CHECK(cudaMemset(e_start, '\0', N * sizeof(int)));
+//    CUDA_CHECK(cudaMemset(e_end, '\0', N * sizeof(int)));
     CUDA_CHECK(cudaMemset(k, '\0', N * sizeof(float)));
     prepare_data_structures_kernel1<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, degrees, edges, c, k, order, nodes_comm);
     prepare_data_structures_kernel2<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, edges, e_start, e_end);
-    debug_kernel<<<1, 1>>>(N, degrees);
+//    debug_kernel<<<1, 1>>>(N, degrees);
     CUDA_CHECK(cudaMemcpy(ac, k, N * sizeof(float), cudaMemcpyDeviceToDevice));
-    thrust::sort(thrust::device, order, order + N, vertex_cmp(degrees));
+//    thrust::sort(thrust::device, order, order + N, vertex_cmp(degrees));
 }
 
 __device__ uint32_t arr_hash(uint64_t key, int seed, uint64_t N)
@@ -127,7 +115,10 @@ __device__ uint32_t getpos(uint64_t* owner, uint64_t key, int N)
             {
                 return pos;
             }
-            // TODO if there's more than one thread for each vertex this breaks
+            else if (owner[pos] == key)
+            {
+                return pos;
+            }
         }
     }
 }
@@ -147,7 +138,7 @@ __global__  void compute_changes_kernel(int N, int E, float* changes, uint64_t* 
         }
     }
 }
-
+/*
 __device__ float compute_move(int vertex, int N, float* changes, uint64_t* owner, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m)
 {
     int resultComm = c[vertex];
@@ -158,7 +149,8 @@ __device__ float compute_move(int vertex, int N, float* changes, uint64_t* owner
         uint32_t pos1 = getpos(owner, (uint64_t)N * vertex + i + 1, N);
         uint32_t pos2 = getpos(owner, (uint32_t)N * vertex + c[vertex] + 1, N);
         float change = 1 / m * (changes[pos1] - changes[pos2]) + k[vertex] * ((ac[c[vertex]] - k[vertex]) - ac[i]) / (2 * m * m);
-        if ((change > resultChange || (change == resultChange && i < resultComm)) &&
+        if ((change > resultChange ||
+                (change == resultChange && i < resultComm)) &&
                 (nodes_comm[c[vertex]] > 1 ||
                  nodes_comm[i] > 1 ||
                  i < c[vertex]))
@@ -182,6 +174,68 @@ __global__ void modularity_optimisation_kernel(int N, int* e_start, int* e_end, 
         atomicAdd(gain, compute_move(order[v], N, changes, owner, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m));
     }
 }
+*/
+union Magic
+{
+    unsigned long long encoded;
+    struct {
+        int comm;
+        float change;
+    } decoded;
+};
+
+static_assert(sizeof(Magic) == 8, "too much magic");
+
+__global__ void prepare_magic_kernel(int N, Magic* magic, int* c)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int num_threads = blockDim.x * gridDim.x;
+    for (int v = tid; v < N; v += num_threads)
+    {
+        magic[v].decoded.comm = c[v];
+        magic[v].decoded.change = 0;
+    }
+}
+
+__global__ void modularity_optimisation_kernel(int N, int E, Edge* edges, int* c, float* k, int* nodes_comm, int* new_nodes_comm, float* ac, float m, float* changes, uint64_t* owner, Magic* magic)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int num_threads = blockDim.x * gridDim.x;
+    for (int e = tid; e < E; e += num_threads)
+    {
+        int i = c[edges[e].dst];
+        int vertex = edges[e].src;
+        if (nodes_comm[c[vertex]] <= 1 && nodes_comm[i] <= 1 && i >= c[vertex])
+        {
+            continue;
+        }
+        uint32_t pos1 = getpos(owner, (uint64_t)N * vertex + i + 1, N);
+        uint32_t pos2 = getpos(owner, (uint32_t)N * vertex + c[vertex] + 1, N);
+        float change = 1 / m * (changes[pos1] - changes[pos2]) + k[vertex] * ((ac[c[vertex]] - k[vertex]) - ac[i]) / (2 * m * m);
+        Magic new_magic;
+        new_magic.decoded.comm = i;
+        new_magic.decoded.change = change;
+//        printf("vertex = % d new_comm = %d result_change = %f\n", vertex, i, change);
+        while (true)
+        {
+            Magic local_magic = magic[vertex];
+            if ((change > local_magic.decoded.change ||
+                    (change == local_magic.decoded.change && i < local_magic.decoded.comm)))
+            {
+
+                if (atomicCAS((unsigned long long*)(magic + vertex),
+                            local_magic.encoded, new_magic.encoded)
+                        == local_magic.encoded)
+                {
+                    atomicAdd(new_nodes_comm + i, 1);
+                    atomicAdd(new_nodes_comm + local_magic.decoded.comm, -1);
+                    break;
+                }
+            }
+            else break;
+        }
+    }
+}
 
 __global__ void update_ac_kernel(int N, float* ac, int* c, float* k)
 {
@@ -193,8 +247,25 @@ __global__ void update_ac_kernel(int N, float* ac, int* c, float* k)
     }
 }
 
+__global__ void compute_new_c_changes_kernel(int N, Magic* magic, int* new_c, float* result_change)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int num_threads = blockDim.x * gridDim.x;
+    for (int v = tid; v < N; v += num_threads)
+    {
+        new_c[v] = magic[v].decoded.comm;
+        result_change[v] = magic[v].decoded.change;
+    }
+}
+
+__global__ void debug_kernel(int N, float* result_change)
+{
+    for (int i = 0; i < N; ++i)
+        printf("(%d %f)\n", i, result_change[i]);
+}
+
 // return modularity gain
-__host__ float modularity_optimisation(int N, int E, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m, float* changes, uint64_t* owner, int* order)
+__host__ float modularity_optimisation(int N, int E, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m, float* changes, uint64_t* owner, int* order, float* result_change, Magic* magic)
 {
     float* gain;
     CUDA_CHECK(cudaMalloc((void**)&gain, sizeof(float)));
@@ -203,12 +274,19 @@ __host__ float modularity_optimisation(int N, int E, int* e_start, int* e_end, E
     CUDA_CHECK(cudaMemset(changes, '\0', sizeof(float) * ARRAY_SIZE));
     compute_changes_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, changes, owner, edges, c);
 
-    modularity_optimisation_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, gain, changes, owner, order);
+    prepare_magic_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, magic, c);
+    modularity_optimisation_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, edges, c, k, nodes_comm, new_nodes_comm, ac, m, changes, owner, magic);
+    compute_new_c_changes_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, magic, new_c, result_change);
+//    debug_kernel<<<1, 1>>>(N, result_change);
+    float result = thrust::reduce(thrust::device, result_change, result_change + N);
+
+
+//    modularity_optimisation_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, gain, changes, owner, order);
     std::swap(c, new_c);
     CUDA_CHECK(cudaMemcpy(nodes_comm, new_nodes_comm, N * sizeof(int), cudaMemcpyDeviceToDevice));
     CUDA_CHECK(cudaMemset(ac, '\0', N * sizeof(float)));
     update_ac_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, ac, c, k);
-    float result = device_fetch_var(gain);
+//    float result = device_fetch_var(gain);
     CUDA_CHECK(cudaFree(gain));
     return result;
 }
@@ -280,6 +358,8 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     int* order;
     int* nodes_comm;
     int* new_nodes_comm;
+    float* result_change;
+    Magic* magic;
 
     N = N_;
     E = E_;
@@ -288,12 +368,12 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
 
     CUDA_CHECK(cudaMalloc((void**)&final_communities, N * sizeof(int)));
     prepare_final_communities<<<BLOCKS, THREADS_PER_BLOCK>>>(final_communities, N);
-    CUDA_CHECK(cudaMalloc((void**)&degrees, N * sizeof(int)));
-    CUDA_CHECK(cudaMalloc((void**)&e_start, N * sizeof(int)));
-    CUDA_CHECK(cudaMalloc((void**)&e_end, N * sizeof(int)));
+//    CUDA_CHECK(cudaMalloc((void**)&degrees, N * sizeof(int)));
+//    CUDA_CHECK(cudaMalloc((void**)&e_start, N * sizeof(int)));
+//    CUDA_CHECK(cudaMalloc((void**)&e_end, N * sizeof(int)));
     CUDA_CHECK(cudaMalloc((void**)&c, N * sizeof(int)));
     CUDA_CHECK(cudaMalloc((void**)&new_c, N * sizeof(int)));
-    CUDA_CHECK(cudaMalloc((void**)&order, N * sizeof(int)));
+//    CUDA_CHECK(cudaMalloc((void**)&order, N * sizeof(int)));
     CUDA_CHECK(cudaMalloc((void**)&nodes_comm, N * sizeof(int)));
     CUDA_CHECK(cudaMalloc((void**)&new_nodes_comm, N * sizeof(int)));
     CUDA_CHECK(cudaMalloc((void**)&k, N * sizeof(float)));
@@ -301,6 +381,8 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     CUDA_CHECK(cudaMalloc((void**)&edges, sizeof(Edge) * E));
     CUDA_CHECK(cudaMalloc((void**)&changes, ARRAY_SIZE * sizeof(float)));
     CUDA_CHECK(cudaMalloc((void**)&owner, ARRAY_SIZE * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMalloc((void**)&result_change, N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void**)&magic, N * sizeof(Magic)));
     CUDA_CHECK(cudaMemcpy(edges, orig_edges, sizeof(Edge) * E, cudaMemcpyHostToDevice));
 
     prepare_data_structures(N, E, edges, degrees, e_start, e_end, k, order, nodes_comm, c, ac);
@@ -313,7 +395,7 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     float modularity_change = 0;
     do
     {
-        modularity_change = modularity_optimisation(N, E, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, changes, owner, order);
+        modularity_change = modularity_optimisation(N, E, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, changes, owner, order, result_change, magic);
         std::swap(c, new_c);
         aggregate(N, E, orig_N, edges, c, final_communities, degrees, e_start, e_end, k, order, nodes_comm, ac);
     } while (modularity_change > min_gain);
@@ -329,7 +411,7 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     }
     float* ac_host = (float*)malloc(orig_N * sizeof(float));
     memset(ac_host, '\0', orig_N * sizeof(float));
-    cudaDeviceSynchronize();
+    CUDA_CHECK(cudaDeviceSynchronize());
     for (int i = 0; i < orig_N; ++i)
     {
         ac_host[final_communities_host[i]] += k_host[i];
@@ -379,14 +461,16 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     CUDA_CHECK(cudaFree(new_c));
     CUDA_CHECK(cudaFree(k));
     CUDA_CHECK(cudaFree(ac));
-    CUDA_CHECK(cudaFree(order));
+//    CUDA_CHECK(cudaFree(order));
     CUDA_CHECK(cudaFree(degrees));
-    CUDA_CHECK(cudaFree(e_start));
-    CUDA_CHECK(cudaFree(e_end));
+//    CUDA_CHECK(cudaFree(e_start));
+//    CUDA_CHECK(cudaFree(e_end));
     CUDA_CHECK(cudaFree(changes));
     CUDA_CHECK(cudaFree(owner));
     CUDA_CHECK(cudaFree(nodes_comm));
     CUDA_CHECK(cudaFree(new_nodes_comm));
     CUDA_CHECK(cudaFree(edges));
+    CUDA_CHECK(cudaFree(result_change));
+    CUDA_CHECK(cudaFree(magic));
 }
 

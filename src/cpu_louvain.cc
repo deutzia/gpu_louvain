@@ -95,6 +95,7 @@ float compute_move(int vertex)
     {
         int i = c[edges[e].dst];
         float change = 1 / m * (changes[i] - changes[c[vertex]]) + k[vertex] * ((ac[c[vertex]] - k[vertex]) - ac[i]) / (2 * m * m);
+        //printf("vertex = %d new_comm = %d result_change = %f\n", vertex, i, change);
         if ((change > resultChange || (change == resultChange && i < resultComm)) &&
                 (nodes_comm[c[vertex]] > 1 ||
                  nodes_comm[i] > 1 ||
@@ -110,6 +111,7 @@ float compute_move(int vertex)
         new_c[vertex] = resultComm;
     else
         new_c[vertex] = c[vertex];
+    //printf("(%d %f)\n", vertex, resultChange);
     return resultChange;
 }
 
