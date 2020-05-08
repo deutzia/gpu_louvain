@@ -132,17 +132,24 @@ __device__ uint32_t getpos(uint64_t* owner, uint64_t key, int N)
     }
 }
 
-__device__ float compute_move(int vertex, int N, float* changes, uint64_t* owner, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m)
+__global__  void compute_changes_kernel(int N, int E, float* changes, uint64_t* owner, Edge* edges, int* c)
 {
-    for (int j = e_start[vertex]; j < e_end[vertex]; ++j)
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int num_threads = blockDim.x * gridDim.x;
+    for (int e = tid; e < E; e += num_threads)
     {
-        if (edges[j].dst != vertex)
+        int vertex = edges[e].src;
+        if (edges[e].dst != vertex)
         {
-            uint64_t key = (uint64_t)N * vertex + c[edges[j].dst] + 1;
+            uint64_t key = (uint64_t)N * vertex + c[edges[e].dst] + 1;
             uint32_t pos = getpos(owner, key, N);
-            atomicAdd(&changes[pos], edges[j].weight);
+            atomicAdd(&changes[pos], edges[e].weight);
         }
     }
+}
+
+__device__ float compute_move(int vertex, int N, float* changes, uint64_t* owner, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m)
+{
     int resultComm = c[vertex];
     float resultChange = 0;
     for (int e = e_start[vertex]; e < e_end[vertex]; ++e)
@@ -187,13 +194,15 @@ __global__ void update_ac_kernel(int N, float* ac, int* c, float* k)
 }
 
 // return modularity gain
-__host__ float modularity_optimisation(int N, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m, float* changes, uint64_t* owner, int* order)
+__host__ float modularity_optimisation(int N, int E, int* e_start, int* e_end, Edge* edges, int* c, float* k, int* new_c, int* nodes_comm, int* new_nodes_comm, float* ac, float m, float* changes, uint64_t* owner, int* order)
 {
     float* gain;
     CUDA_CHECK(cudaMalloc((void**)&gain, sizeof(float)));
     CUDA_CHECK(cudaMemset(gain, '\0', sizeof(float)));
     CUDA_CHECK(cudaMemset(owner, '\0', sizeof(int) * ARRAY_SIZE));
     CUDA_CHECK(cudaMemset(changes, '\0', sizeof(float) * ARRAY_SIZE));
+    compute_changes_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, changes, owner, edges, c);
+
     modularity_optimisation_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(N, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, gain, changes, owner, order);
     std::swap(c, new_c);
     CUDA_CHECK(cudaMemcpy(nodes_comm, new_nodes_comm, N * sizeof(int), cudaMemcpyDeviceToDevice));
@@ -304,7 +313,7 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     float modularity_change = 0;
     do
     {
-        modularity_change = modularity_optimisation(N, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, changes, owner, order);
+        modularity_change = modularity_optimisation(N, E, e_start, e_end, edges, c, k, new_c, nodes_comm, new_nodes_comm, ac, m, changes, owner, order);
         std::swap(c, new_c);
         aggregate(N, E, orig_N, edges, c, final_communities, degrees, e_start, e_end, k, order, nodes_comm, ac);
     } while (modularity_change > min_gain);
