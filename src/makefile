@@ -1,6 +1,6 @@
 CXX = g++
 CC = gcc
-NVCC = /usr/local/cuda/bin//nvcc
+NVCC = /usr/local/cuda/bin/nvcc
 HOMEDIR = ..
 CPPFLAGS = -Wall -Wextra -std=c++17 -O3 -g
 CFLAGS = -Wall -Wextra -std=c11 -O3 -g
@@ -34,7 +34,7 @@ main: $(OBJS)
 
 %.o: %.cu
 	$(NVCC) -c -O3 $(DEPFLAGS) $(INCFLAGS) $< -o $@
-	$(NVCC) -MM $(CPPFLAGS) $(DEPFLAGS) $< -o $*.d
+	$(NVCC) -MM $(DEPFLAGS) $< -o $*.d
 	@mv -f $*.d $*.d.tmp
 	@sed -e 's|.*:|$*.o:|' < $*.d.tmp > $*.d
 	@sed -e 's/.*://' -e 's/\\$$//' < $*.d.tmp | fmt -1 | \

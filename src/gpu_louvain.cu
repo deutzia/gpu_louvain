@@ -131,7 +131,7 @@ __device__ float compute_move(int vertex, int N, float* changes, uint64_t* owner
     }
     int resultComm = -1;
     float resultChange = 0;
-    for (int i = 0; i < N; ++i) // todo nie iteorwać po wszystkich, tylko po sąsiednich
+    for (int i = 0; i < N; ++i) // TODO nie iteorwać po wszystkich, tylko po sąsiednich
     {
         uint32_t pos1 = getpos(owner, (uint64_t)N * vertex + i + 1, N);
         uint32_t pos2 = getpos(owner, (uint32_t)N * vertex + c[vertex] + 1, N);
