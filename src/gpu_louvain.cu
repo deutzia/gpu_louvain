@@ -10,7 +10,7 @@
 
 #define BLOCKS 80
 #define THREADS_PER_BLOCK 128
-#define ARRAY_SIZE (1 << 28)
+#define ARRAY_SIZE (1LL << 28)
 
 struct edge_cmp
 {
@@ -65,6 +65,19 @@ __global__ void prepare_data_structures_kernel2(int N, int E, Edge* edges, int* 
     }
 }
 
+__global__ void debug_kernel(int N, int* degrees)
+{
+    int min = N, max = 0, sum = 0;
+    for (int i = 0; i < N; ++i)
+    {
+        sum += degrees[i];
+        if (min > degrees[i])
+            min = degrees[i];
+        if (max < degrees[i])
+            max = degrees[i];
+    }
+}
+
 struct vertex_cmp
 {
     int* degrees;
@@ -86,6 +99,7 @@ __host__ void prepare_data_structures(int N, int E, Edge* edges, int* degrees, i
     CUDA_CHECK(cudaMemset(k, '\0', N * sizeof(float)));
     prepare_data_structures_kernel1<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, degrees, edges, c, k, order, nodes_comm);
     prepare_data_structures_kernel2<<<BLOCKS, THREADS_PER_BLOCK>>>(N, E, edges, e_start, e_end);
+    debug_kernel<<<1, 1>>>(N, degrees);
     CUDA_CHECK(cudaMemcpy(ac, k, N * sizeof(float), cudaMemcpyDeviceToDevice));
     thrust::sort(thrust::device, order, order + N, vertex_cmp(degrees));
 }
@@ -93,8 +107,8 @@ __host__ void prepare_data_structures(int N, int E, Edge* edges, int* degrees, i
 __device__ uint32_t arr_hash(uint64_t key, int seed, uint64_t N)
 {
     uint64_t l = N * N * seed + key - 1;
-    l = (l << 32) * 1605375019ULL + (l & 0xffffffffULL) * 553437317ULL + 3471094223ULL;
-    l = (l << 32) * 2769702083ULL + (l & 0xffffffffULL) * 3924398899ULL + 2998053229ULL;
+    l = (l >> 32) * 1605375019ULL + (l & 0xffffffffULL) * 553437317ULL + 3471094223ULL;
+    l = (l >> 32) * 2769702083ULL + (l & 0xffffffffULL) * 3924398899ULL + 2998053229ULL;
     return l % ARRAY_SIZE;
 }
 
