@@ -134,13 +134,17 @@ void aggregate()
 {
     int reorder[N];
     for (int i = 0; i < N; ++i)
-        reorder[i] = -1;
-    int counter = 0;
+        reorder[i] = 0;
+    for (int i = 0; i < N; ++i)
+        reorder[c[i]] = 1;
+    int new_N = 0, tmp;
     for (int i = 0; i < N; ++i)
     {
-        if (reorder[c[i]] == -1)
-            reorder[c[i]] = counter++;
+        tmp = reorder[i];
+        reorder[i] = new_N;
+        new_N += tmp;
     }
+
     for (int i = 0; i < E; ++i)
     {
         edges[i].src = reorder[c[edges[i].src]];
@@ -150,7 +154,7 @@ void aggregate()
     {
         final_communities[i] = reorder[c[final_communities[i]]];
     }
-    N = counter;
+    N = new_N;
     prepare_data_structures();
 }
 
