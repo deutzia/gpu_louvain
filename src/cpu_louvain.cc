@@ -82,6 +82,15 @@ void prepare_data_structures()
     {
         nodes_comm[i] = 1;
     }
+    for (int i = 0; i < N; ++i)
+    {
+        new_nodes_comm[i] = 1;
+    }
+
+    for (int i = 0; i < N; ++i)
+    {
+        new_c[i] = i;
+    }
 }
 
 float compute_move(int vertex)
@@ -118,21 +127,82 @@ float compute_move(int vertex)
     return resultChange;
 }
 
+void debug_function(int N, float* ac)
+{
+    for (int i = 0; i < N; ++i)
+        printf("ac[%d] = %f ", i, ac[i]);
+    printf("\n");
+}
+
+float compute_modularity()
+{
+//    fprintf(stderr, "new c: ");
+//    for (int i = 0; i < N; ++i)
+//    {
+//        fprintf(stderr, "(%d %d) ", i, new_c[i]);
+//    }
+//    fprintf(stderr, "\n");
+//    debug_function(N, ac);
+    float q = 0;
+    memset(changes, 0, N * sizeof(float));
+    for (int i = 0; i < E; ++i)
+    {
+        if (new_c[edges[i].src] == new_c[edges[i].dst])
+        {
+            changes[edges[i].src] += edges[i].weight;
+        }
+    }
+    for (int i = 0; i < N; ++i)
+    {
+        q += changes[i] / (2 * m);
+    }
+    for (int i = 0; i < N; ++i)
+    {
+        q -= ac[i] * ac[i] / (4 * m * m);
+    }
+    return q;
+}
+
+
 // return modularity gain
 float modularity_optimisation()
 {
+//    printf("N = %d E = %d m = %f\n", N, E, m);
+//    fprintf(stderr, "c in modularity_optimisation: ");
+//    for (int i = 0; i < N; ++i)
+//    {
+//        fprintf(stderr, "(%d %d) ", i, c[i]);
+//    }
+//    fprintf(stderr, "\n");
+//    fprintf(stderr, "ac in modularity_optimisation: ");
+//    for (int i = 0; i < N; ++i)
+//    {
+//        fprintf(stderr, "(%d %f) ", i, ac[i]);
+//    }
+//    fprintf(stderr, "\n");
+//    fprintf(stderr, "(new) nodes_comm: ");
+//    for (int i = 0; i < N; ++i)
+//    {
+//        fprintf(stderr, "(%d %d) ", i, nodes_comm[i]);
+//    }
+//    fprintf(stderr, "\n");
+//    fprintf(stderr, "(new) nodes_comm: ");
+//    for (int i = 0; i < N; ++i)
+//    {
+//        fprintf(stderr, "(%d %d) ", i, new_nodes_comm[i]);
+//    }
+//    fprintf(stderr, "\n");
     float gain = 0;
     for (int v = 0; v < N; ++v) // parallel
     {
         gain += compute_move(order[v]);
     }
-    std::swap(c, new_c);
-    memcpy(nodes_comm, new_nodes_comm, N * sizeof(int));
-    memset(ac, '\0', N * sizeof(float));
-    for (int v = 0; v < N; ++v)
-    {
-        ac[c[v]] += k[v];
-    }
+//    fprintf(stderr, "new_c after modularity_optimisation: ");
+//    for (int i = 0; i < N; ++i)
+//    {
+//        fprintf(stderr, "(%d %d) ", i, new_c[i]);
+//    }
+//    fprintf(stderr, "\n");
     return gain;
 }
 
@@ -197,12 +267,33 @@ void cpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     m /= 2;
     memcpy(orig_edges, edges, E * sizeof(Edge));
     prepare_data_structures();
-    float modularity_change = 0;
+
+    float modularity_change = 0, sum = 0, old_modularity = compute_modularity();
     do
     {
-        modularity_change = modularity_optimisation();
+        sum = 0;
+        do
+        {
+            modularity_optimisation();
+            memset(ac, '\0', N * sizeof(float));
+            for (int v = 0; v < N; ++v)
+            {
+                ac[new_c[v]] += k[v];
+            }
+            modularity_change = compute_modularity() - old_modularity;
+//            printf("modularity_change = %.9f\n", modularity_change);
+            if (modularity_change > EPS)
+            {
+                std::swap(c, new_c);
+                memcpy(nodes_comm, new_nodes_comm, N * sizeof(int));
+                sum += modularity_change;
+                old_modularity += modularity_change;
+            }
+            else break;
+        } while (true);
+//        printf("aggregating\n");
         aggregate();
-    } while (modularity_change > min_gain);
+    } while (sum > min_gain);
 
     memset(k, '\0', orig_N * sizeof(float));
     for (int i = 0; i < E; ++i)
@@ -234,9 +325,9 @@ void cpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
 
     printf("%f\n", q);
     printf("0 0\n"); // TODO measure times
-    printf("%d\n", N);
     if (verbose)
     {
+        printf("%d\n", N);
         for (int i = 0; i < N; ++i)
         {
             printf("%d ", i + 1);
