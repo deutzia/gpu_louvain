@@ -1,4 +1,4 @@
-#include "cpu_louvain.h"
+#include "gpu_louvain.h"
 
 #include <algorithm>
 #include <stdint.h>
@@ -331,7 +331,7 @@ __global__ void prepare_final_communities(int* fc, int N)
     }
 }
 
-void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
+void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose, std::map<int, int>& reorder)
 {
     int N;
     int orig_N;
@@ -452,7 +452,7 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
             for (int v = 0; v < orig_N; ++v)
             {
                 if (final_communities_host[v] == i)
-                    printf("%d ", v + 1);
+                    printf("%d ", reorder[v]);
             }
             printf("\n");
         }

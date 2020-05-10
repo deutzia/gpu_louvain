@@ -115,6 +115,7 @@ int main(int argc, char* argv[])
     int E = 0;
     std::set<int> vertices_set;
     std::map<int, int> reorder;
+    std::map<int, int> reorder_back;
     for (int i = 0; i < nz; i++)
     {
         fscanf(file, " %d %d %f\n", &I, &J, &val);
@@ -129,6 +130,7 @@ int main(int argc, char* argv[])
     int vcount = 0;
     for (const auto& v : vertices_set)
     {
+        reorder_back[vcount] = v;
         reorder[v] = vcount++;
     }
     for (int i = 0; i < E; ++i)
@@ -141,7 +143,7 @@ int main(int argc, char* argv[])
     std::random_shuffle(edges, edges + E);
 //    detect_cuda_init();
 
-    gpu_louvain(N, edges, E, min_gain, verbose);
+    gpu_louvain(N, edges, E, min_gain, verbose, reorder_back);
 //    cpu_louvain(N, edges, E, min_gain, verbose);
     free(edges);
 }
