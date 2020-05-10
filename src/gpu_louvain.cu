@@ -10,10 +10,10 @@
 #include "utils.h"
 
 #define BLOCKS 80
-#define THREADS_PER_BLOCK 128
+#define THREADS_PER_BLOCK 1024
 #define EPS (1e-12)
 
-uint32_t ARRAY_SIZE = 1LL << 28;
+uint32_t ARRAY_SIZE = 1LL << 30;
 
 __global__ void
 prepare_data_structures_kernel(int N, int E, Edge* edges, int* c, float* k, int* nodes_comm, int* new_nodes_comm)
@@ -356,7 +356,7 @@ void gpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     orig_N = N_;
     orig_edges = edges_;
 
-    while (E * 100 < ARRAY_SIZE)
+    while (E * 10 < ARRAY_SIZE)
     {
         ARRAY_SIZE >>= 1;
     }

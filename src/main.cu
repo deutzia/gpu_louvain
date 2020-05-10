@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
@@ -137,9 +138,10 @@ int main(int argc, char* argv[])
     }
     if (file != stdin) fclose(file);
 
+    std::random_shuffle(edges, edges + E);
 //    detect_cuda_init();
 
     gpu_louvain(N, edges, E, min_gain, verbose);
-    cpu_louvain(N, edges, E, min_gain, verbose);
+//    cpu_louvain(N, edges, E, min_gain, verbose);
     free(edges);
 }
