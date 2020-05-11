@@ -13,7 +13,7 @@
 #define THREADS_PER_BLOCK 1024
 #define EPS (1e-12)
 
-uint32_t ARRAY_SIZE = 1LL << 30;
+uint32_t ARRAY_SIZE = 1LL << 28;
 
 __global__ void
 prepare_data_structures_kernel(int N, int E, Edge* edges, int* c, float* k, int* nodes_comm, int* new_nodes_comm)
