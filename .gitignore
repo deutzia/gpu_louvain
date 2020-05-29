@@ -4,3 +4,6 @@
 *.swo
 examples/
 gpulouvain
+*.log
+*.tex
+*.aux
