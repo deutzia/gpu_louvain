@@ -107,7 +107,6 @@ float compute_move(int vertex)
     {
         int i = c[edges[e].dst];
         float change = 1 / m * (changes[i] - changes[c[vertex]]) + k[vertex] * ((ac[c[vertex]] - k[vertex]) - ac[i]) / (2 * m * m);
-        //printf("vertex = %d new_comm = %d result_change = %f\n", vertex, i, change);
         if ((change > resultChange || (fabs(change - resultChange) < EPS && i < resultComm)) &&
                 (nodes_comm[c[vertex]] > 1 ||
                  nodes_comm[i] > 1 ||
@@ -123,26 +122,11 @@ float compute_move(int vertex)
         new_c[vertex] = resultComm;
     else
         new_c[vertex] = c[vertex];
-    //printf("(%d %f)\n", vertex, resultChange);
     return resultChange;
-}
-
-void debug_function(int N, float* ac)
-{
-    for (int i = 0; i < N; ++i)
-        printf("ac[%d] = %f ", i, ac[i]);
-    printf("\n");
 }
 
 float compute_modularity()
 {
-//    fprintf(stderr, "new c: ");
-//    for (int i = 0; i < N; ++i)
-//    {
-//        fprintf(stderr, "(%d %d) ", i, new_c[i]);
-//    }
-//    fprintf(stderr, "\n");
-//    debug_function(N, ac);
     float q = 0;
     memset(changes, 0, N * sizeof(float));
     for (int i = 0; i < E; ++i)
@@ -167,42 +151,11 @@ float compute_modularity()
 // return modularity gain
 float modularity_optimisation()
 {
-//    printf("N = %d E = %d m = %f\n", N, E, m);
-//    fprintf(stderr, "c in modularity_optimisation: ");
-//    for (int i = 0; i < N; ++i)
-//    {
-//        fprintf(stderr, "(%d %d) ", i, c[i]);
-//    }
-//    fprintf(stderr, "\n");
-//    fprintf(stderr, "ac in modularity_optimisation: ");
-//    for (int i = 0; i < N; ++i)
-//    {
-//        fprintf(stderr, "(%d %f) ", i, ac[i]);
-//    }
-//    fprintf(stderr, "\n");
-//    fprintf(stderr, "(new) nodes_comm: ");
-//    for (int i = 0; i < N; ++i)
-//    {
-//        fprintf(stderr, "(%d %d) ", i, nodes_comm[i]);
-//    }
-//    fprintf(stderr, "\n");
-//    fprintf(stderr, "(new) nodes_comm: ");
-//    for (int i = 0; i < N; ++i)
-//    {
-//        fprintf(stderr, "(%d %d) ", i, new_nodes_comm[i]);
-//    }
-//    fprintf(stderr, "\n");
     float gain = 0;
     for (int v = 0; v < N; ++v) // parallel
     {
         gain += compute_move(order[v]);
     }
-//    fprintf(stderr, "new_c after modularity_optimisation: ");
-//    for (int i = 0; i < N; ++i)
-//    {
-//        fprintf(stderr, "(%d %d) ", i, new_c[i]);
-//    }
-//    fprintf(stderr, "\n");
     return gain;
 }
 
@@ -281,7 +234,6 @@ void cpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
                 ac[new_c[v]] += k[v];
             }
             modularity_change = compute_modularity() - old_modularity;
-//            printf("modularity_change = %.9f\n", modularity_change);
             if (modularity_change > EPS)
             {
                 std::swap(c, new_c);
@@ -291,7 +243,6 @@ void cpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
             }
             else break;
         } while (true);
-//        printf("aggregating\n");
         aggregate();
     } while (sum > min_gain);
 
@@ -324,7 +275,7 @@ void cpu_louvain(int N_, Edge* edges_, int E_, float min_gain, bool verbose)
     }
 
     printf("%f\n", q);
-    printf("0 0\n"); // TODO measure times
+    printf("0 0\n");
     if (verbose)
     {
         printf("%d\n", N);
